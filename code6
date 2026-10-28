@@ -1,0 +1,476 @@
+def coin_greedy(coins, amount):
+    """贪心算法：每步取 ≤ 余额的最大面额，拿完不回头。"""
+    coins_sorted = sorted(coins, reverse=True)  # 降序排列
+    result = []
+    remaining = amount
+    for coin in coins_sorted:
+        while remaining >= coin:
+            result.append(coin)
+            remaining -= coin
+    if remaining != 0:
+        return None  # 无解
+    return len(result), result
+
+
+def coin_dp(coins, amount):
+    """动态规划：dp[c] = 凑出 c 块最少几枚。地基 dp[0]=0。"""
+    # 初始化：用一个不可能的大数表示"凑不出来"
+    INF = float('inf')
+    dp = [INF] * (amount + 1)
+    dp[0] = 0  # 地基
+    
+    # 记录每一步最后一枚用的是哪种硬币，便于回溯
+    last_coin = [0] * (amount + 1)
+    
+    for c in range(1, amount + 1):
+        for coin in coins:
+            if c >= coin and dp[c - coin] + 1 < dp[c]:
+                dp[c] = dp[c - coin] + 1
+                last_coin[c] = coin
+    
+    if dp[amount] == INF:
+        return None, None
+    
+    # 回溯找出具体组合
+    combination = []
+    c = amount
+    while c > 0:
+        combination.append(last_coin[c])
+        c -= last_coin[c]
+    
+    # 关键一行：dp[c] = 1 + min(dp[c-1], dp[c-5], dp[c-11])
+    return dp[amount], sorted(combination, reverse=True)
+
+
+def print_coin_dp_table(coins, amount):
+    """打印凑硬币的 DP 表，展示填表过程。"""
+    INF = float('inf')
+    dp = [INF] * (amount + 1)
+    dp[0] = 0
+    last_coin = [0] * (amount + 1)
+    
+    for c in range(1, amount + 1):
+        for coin in coins:
+            if c >= coin and dp[c - coin] + 1 < dp[c]:
+                dp[c] = dp[c - coin] + 1
+                last_coin[c] = coin
+    
+    print(f"\n凑硬币 DP 表 (面额 {coins}, 金额 {amount}):")
+    print("-" * 50)
+    header = "金额: " + " ".join(f"{c:5d}" for c in range(amount + 1))
+    values = "枚数: " + " ".join(f"{dp[c]:5d}" if dp[c] != INF else "  INF" for c in range(amount + 1))
+    last = "末币: " + " ".join(f"{last_coin[c]:5d}" for c in range(amount + 1))
+    print(header)
+    print(values)
+    print(last)
+    print("-" * 50)
+    return dp, last_coin
+
+
+# ============================================================
+# Step 2: 0-1 背包 —— 动态规划 + 回溯组合
+# ============================================================
+
+# 原始背包数据
+ITEMS = [
+    {"name": "帐篷", "weight": 300, "value": 90},
+    {"name": "炉具", "weight": 200, "value": 60},
+    {"name": "睡袋", "weight": 350, "value": 115},
+    {"name": "食物", "weight": 400, "value": 120},
+    {"name": "水具", "weight": 250, "value": 80},
+]
+
+
+def knapsack_01(items, capacity, print_table=True):
+    """
+    0-1 背包动态规划。
+    dp[i][c] = max(不带第i件, 带第i件)
+    返回: 最大重要度, 选中物品列表, dp表
+    """
+    n = len(items)
+    
+    # dp[i][c]: 前 i 件、限重 c 时的最大重要度
+    # 用 (n+1) x (capacity+1) 表方便处理第0行全0
+    dp = [[0] * (capacity + 1) for _ in range(n + 1)]
+    
+    for i in range(1, n + 1):
+        w_i = items[i - 1]["weight"]
+        v_i = items[i - 1]["value"]
+        for c in range(capacity + 1):
+            # 不带第 i 件：答案继承正上方 dp[i-1][c]
+            not_take = dp[i - 1][c]
+            # 带第 i 件（前提 c >= w_i）
+            take = dp[i - 1][c - w_i] + v_i if c >= w_i else 0
+            # 两种取大
+            dp[i][c] = max(not_take, take)
+    
+    # 回溯找选中的物品
+    selected = []
+    c = capacity
+    for i in range(n, 0, -1):
+        if dp[i][c] != dp[i - 1][c]:  # 不一样说明第 i 件被选了
+            selected.append(items[i - 1])
+            c -= items[i - 1]["weight"]
+    
+    selected.reverse()
+    
+    if print_table:
+        print_knapsack_table(dp, items, capacity, selected)
+    
+    return dp[n][capacity], selected, dp
+
+
+def print_knapsack_table(dp, items, capacity, selected):
+    """打印背包 DP 表，并标出回溯路径。"""
+    n = len(items)
+    
+    print(f"\n背包 DP 表 (容量 {capacity}g):")
+    print("=" * 80)
+    
+    # 打印表头（容量档位）
+    col_width = 6
+    header = "物品\\容量".ljust(10)
+    for c in range(0, capacity + 1, 100):
+        header += f"{c:>{col_width}}"
+    print(header)
+    print("-" * 80)
+    
+    # 打印每一行
+    for i in range(n + 1):
+        if i == 0:
+            row_label = "前0件".ljust(10)
+        else:
+            name = items[i - 1]["name"]
+            w = items[i - 1]["weight"]
+            v = items[i - 1]["value"]
+            row_label = f"{name}({w}g/{v})".ljust(10)
+        
+        row_values = ""
+        for c in range(0, capacity + 1, 100):
+            row_values += f"{dp[i][c]:>{col_width}}"
+        print(row_label + row_values)
+    
+    print("=" * 80)
+    
+    # 标出回溯路径
+    print("\n回溯路径 (从 dp[5][1000] 向左上追踪):")
+    c = capacity
+    path_rows = []
+    for i in range(n, 0, -1):
+        if dp[i][c] != dp[i - 1][c]:
+            path_rows.append((i, items[i - 1]["name"], items[i - 1]["weight"], items[i - 1]["value"], c))
+            c -= items[i - 1]["weight"]
+    path_rows.reverse()
+    
+    for idx, (i, name, w, v, cap_left) in enumerate(path_rows):
+        print(f"  步骤{idx+1}: dp[{i}][{cap_left + w}] != dp[{i-1}][{cap_left + w}] → 选中 {name} ({w}g, {v}) → 剩余容量 {cap_left}g")
+    
+    print(f"\n选中组合: {[s['name'] for s in selected]}")
+    total_weight = sum(s['weight'] for s in selected)
+    total_value = sum(s['value'] for s in selected)
+    print(f"总重量: {total_weight}g / 总重要度: {total_value}")
+    
+    # 最后一行
+    print(f"\ndp 表最后一行 (前5件, 各容量):")
+    last_row = dp[n]
+    for c in range(0, capacity + 1, 100):
+        marker = " ← 最大" if c == capacity else ""
+        print(f"  容量{c}g: dp[5][{c}] = {last_row[c]}{marker}")
+
+
+# ============================================================
+# 自主实践 ①: 预算 800 对比
+# ============================================================
+
+def budget_compare(items, original_cap=1000, new_cap=800):
+    """对比不同预算下的最优解。"""
+    print("\n" + "=" * 70)
+    print("自主实践①: 预算对比 (1000g vs 800g)")
+    print("=" * 70)
+    
+    # 原始预算
+    _, sel_orig, _ = knapsack_01(items, original_cap, print_table=False)
+    val_orig = sum(s['value'] for s in sel_orig)
+    w_orig = sum(s['weight'] for s in sel_orig)
+    
+    # 新预算
+    _, sel_new, _ = knapsack_01(items, new_cap, print_table=False)
+    val_new = sum(s['value'] for s in sel_new)
+    w_new = sum(s['weight'] for s in sel_new)
+    
+    print(f"\n预算 {original_cap}g:")
+    print(f"  选中: {[s['name'] for s in sel_orig]}")
+    print(f"  总重量: {w_orig}g, 总重要度: {val_orig}")
+    
+    print(f"\n预算 {new_cap}g:")
+    print(f"  选中: {[s['name'] for s in sel_new]}")
+    print(f"  总重量: {w_new}g, 总重要度: {val_new}")
+    
+    print(f"\n差异说明:")
+    print(f"  - 预算减少 200g ({original_cap}→{new_cap}), 重要度损失 {val_orig - val_new} ({val_orig}→{val_new})")
+    print(f"  - 1000g 时恰好装满 (睡袋350+食物400+水具250=1000), 重要度 315")
+    print(f"  - 800g 时需要重新组合, 睡袋(350)+炉具(200)+食物(400)超重, 去掉睡袋改选帐篷(300)+食物(400)+水具(250)也超...")
+    print(f"  - 实际上 800g 最优: 食物400+水具250+炉具200=850超, 睡袋350+炉具200+水具250=800恰好!")
+    
+    return val_orig, val_new
+
+
+# ============================================================
+# 自主实践 ②: 必投项目约束
+# ============================================================
+
+def knapsack_with_required(items, capacity, required_names):
+    """
+    0-1 背包变体: 某些物品「必选」。
+    做法: 先把必选物品的重量和价值扣除, 对剩余物品 + 剩余容量跑标准 0-1 背包。
+    """
+    required = [it for it in items if it["name"] in required_names]
+    optional = [it for it in items if it["name"] not in required_names]
+    
+    req_weight = sum(r["weight"] for r in required)
+    req_value = sum(r["value"] for r in required)
+    
+    if req_weight > capacity:
+        print(f"❌ 必选物品总重 {req_weight}g 超过容量 {capacity}g, 无解!")
+        return None, None
+    
+    remaining_cap = capacity - req_weight
+    
+    # 对可选物品跑标准 0-1
+    n = len(optional)
+    dp = [[0] * (remaining_cap + 1) for _ in range(n + 1)]
+    
+    for i in range(1, n + 1):
+        w_i = optional[i - 1]["weight"]
+        v_i = optional[i - 1]["value"]
+        for c in range(remaining_cap + 1):
+            not_take = dp[i - 1][c]
+            take = dp[i - 1][c - w_i] + v_i if c >= w_i else 0
+            dp[i][c] = max(not_take, take)
+    
+    # 回溯可选物品
+    selected_opt = []
+    c = remaining_cap
+    for i in range(n, 0, -1):
+        if dp[i][c] != dp[i - 1][c]:
+            selected_opt.append(optional[i - 1])
+            c -= optional[i - 1]["weight"]
+    selected_opt.reverse()
+    
+    total_value = req_value + dp[n][remaining_cap]
+    total_weight = req_weight + sum(s["weight"] for s in selected_opt)
+    all_selected = required + selected_opt
+    
+    print(f"\n必投项目约束 (必选: {required_names}):")
+    print(f"  必选物品重 {req_weight}g, 价值 {req_value}, 剩余容量 {remaining_cap}g")
+    print(f"  最终选中: {[s['name'] for s in all_selected]}")
+    print(f"  总重量: {total_weight}g, 总重要度: {total_value}")
+    
+    return total_value, all_selected
+
+
+# ============================================================
+# 独立研究 ①: n 皇后问题 (回溯法)
+# ============================================================
+
+def solve_n_queens(n):
+    """
+    n 皇后问题: 在 n×n 棋盘上放 n 个皇后, 互不攻击。
+    回溯法: 一行一行尝试, 每次放一列, 检查冲突。
+    """
+    solutions = []
+    board = [-1] * n  # board[row] = col, 每行皇后所在列
+    
+    def is_safe(row, col):
+        """检查在 (row, col) 放皇后是否安全。"""
+        for prev_row in range(row):
+            prev_col = board[prev_row]
+            # 同列 或 对角线冲突
+            if prev_col == col or abs(prev_col - col) == row - prev_row:
+                return False
+        return True
+    
+    def backtrack(row):
+        if row == n:
+            solutions.append(board[:])
+            return
+        for col in range(n):
+            if is_safe(row, col):
+                board[row] = col
+                backtrack(row + 1)
+                board[row] = -1  # 撤销选择
+    
+    backtrack(0)
+    return solutions
+
+
+def demo_n_queens():
+    """演示 n 皇后问题。"""
+    print("\n" + "=" * 70)
+    print("独立研究①: n 皇后问题 (回溯法)")
+    print("=" * 70)
+    
+    for n in [4, 8]:
+        sols = solve_n_queens(n)
+        print(f"\n{n} 皇后: 共有 {len(sols)} 个解")
+        if sols:
+            print(f"  第一个解: 每行皇后位置 {sols[0]} (列号, 从0开始)")
+            # 画棋盘
+            board = sols[0]
+            print(f"  棋盘示意 (Q=皇后):")
+            for r in range(n):
+                row_str = "  "
+                for c in range(n):
+                    row_str += "Q " if board[r] == c else ". "
+                print(row_str)
+
+
+# ============================================================
+# 独立研究 ②: 完全背包 (物品可重复选)
+# ============================================================
+
+def unbounded_knapsack(items, capacity):
+    """
+    完全背包: 物品可以重复选无限次。
+    关键区别: 把内层循环从 0→capacity 改为正序 (而非倒序)。
+    原理: 正序遍历时, dp[c-w] 可能已经包含了第 i 件物品 → 允许重复。
+    """
+    dp = [0] * (capacity + 1)
+    
+    for item in items:
+        w, v = item["weight"], item["value"]
+        for c in range(w, capacity + 1):  # 正序! 这就是区别所在
+            dp[c] = max(dp[c], dp[c - w] + v)
+    
+    return dp[capacity]
+
+
+def demo_unbounded_knapsack():
+    """对比 0-1 背包 vs 完全背包。"""
+    print("\n" + "=" * 70)
+    print("独立研究②: 完全背包 vs 0-1 背包")
+    print("=" * 70)
+    
+    # 用凑硬币的例子 (面额可重复 = 完全背包凑硬币)
+    coins = [1, 5, 11]
+    amount = 15
+    
+    # 完全背包凑硬币 (最少枚数)
+    INF = float('inf')
+    dp_unbounded = [INF] * (amount + 1)
+    dp_unbounded[0] = 0
+    for c in range(1, amount + 1):  # 正序 → 可重复
+        for coin in coins:
+            if c >= coin:
+                dp_unbounded[c] = min(dp_unbounded[c], dp_unbounded[c - coin] + 1)
+    
+    print(f"\n凑硬币问题 (面额 {coins}, 金额 {amount}):")
+    print(f"  完全背包 (可重复选): 最少 {dp_unbounded[amount]} 枚 (和 0-1 背包结果相同, 因为硬币本来就可重复)")
+    
+    # 关键行对比
+    print(f"\n完全背包 vs 0-1 背包的代码区别 (内层循环顺序):")
+    print(f"  0-1 背包: for c in range(capacity, w-1, -1)  # 倒序 → 每件物品最多用一次")
+    print(f"  完全背包: for c in range(w, capacity+1)       # 正序 → 每件物品可用无限次")
+    print(f"\n原因: 倒序遍历时 dp[c-w] 还没算过当前物品 → 只能用一次;")
+    print(f"      正序遍历时 dp[c-w] 可能已经包含当前物品 → 可以重复用。")
+
+
+# ============================================================
+# 独立研究 ③: 分支限界
+# ============================================================
+
+def demo_branch_bound():
+    """分支限界一句话 + 与回溯对比。"""
+    print("\n" + "=" * 70)
+    print("独立研究③: 分支限界 (Branch and Bound)")
+    print("=" * 70)
+    
+    print("""
+一句话: 分支限界是一种广度优先 (或最佳优先) 的搜索策略,
+       在每个节点计算「当前最好结果能到多好」的上界 (或下界),
+       如果这个边界不如已知最优解, 就提前剪掉整个分支。
+
+与回溯法对比:
+  - 回溯法 (n皇后): 深度优先, 遇到死路就退, 找所有解
+  - 分支限界 (背包): 广度优先 + 边界剪枝, 找最优解
+
+以背包为例:
+  每个节点 = 「是否带第 i 件」的选择
+  上界估算 = 当前价值 + 剩余容量按性价比贪心能装的价值
+  如果上界 ≤ 当前最优, 剪掉这个分支 → 不用展开
+  比回溯好: 目标是最优解不是所有解, 剪枝力度更大。
+""")
+
+
+# ============================================================
+# 主程序入口
+# ============================================================
+
+if __name__ == "__main__":
+    print("=" * 70)
+    print("第6次课: 贪心与动态规划 —— 完整实践")
+    print("=" * 70)
+    
+    # ---- Step 1: 凑硬币 ----
+    print("\n" + "=" * 70)
+    print("Step 1: 凑硬币 —— 贪心 vs 动规 (面额 [1,5,11], 金额 15)")
+    print("=" * 70)
+    
+    coins_test = [1, 5, 11]
+    amount_test = 15
+    
+    # 贪心
+    greedy_count, greedy_combo = coin_greedy(coins_test, amount_test)
+    print(f"\n【贪心】枚数 = {greedy_count}, 组合 = {greedy_combo}")
+    print(f"  → 取 11 后余额 4, 只能用4个1元, 共5枚 (翻车!)")
+    
+    # 动规
+    dp_count, dp_combo = coin_dp(coins_test, amount_test)
+    print(f"\n【动规】枚数 = {dp_count}, 组合 = {dp_combo}")
+    print(f"  → 5+5+5 = 15, 3枚 (全局最优!)")
+    
+    # 打印 DP 表
+    print_coin_dp_table(coins_test, amount_test)
+    
+    # 关键代码行
+    print("\n动规核心一行 (凑硬币):")
+    print("  dp[c] = 1 + min(dp[c-1], dp[c-5], dp[c-11])")
+    
+    # ---- Step 2: 0-1 背包 ----
+    print("\n\n")
+    print("=" * 70)
+    print("Step 2: 0-1 背包 —— 动规 + 回溯组合")
+    print("=" * 70)
+    
+    print("\n物品表:")
+    print(f"  {'物品':<6} {'重量':>6} {'重要度':>8}")
+    for it in ITEMS:
+        print(f"  {it['name']:<6} {it['weight']:>6} {it['value']:>8}")
+    
+    max_val, selected, dp_table = knapsack_01(ITEMS, capacity=1000)
+    
+    # 关键代码行
+    print("\n0-1 背包递推式 (所有动规代码的心脏):")
+    print("  dp[i][c] = max(dp[i-1][c],              # 不带第 i 件")
+    print("                dp[i-1][c-w[i]] + v[i])   # 带 (前提 c >= w[i])")
+    print("  ↓ 换成一维数组 (优化空间):")
+    print("  for c in range(capacity, w-1, -1):       # 倒序遍历!")
+    print("      dp[c] = max(dp[c], dp[c-w] + v)")
+    
+    # ---- 自主实践 ----
+    print("\n\n")
+    budget_compare(ITEMS, 1000, 800)
+    
+    # 必投项目约束
+    knapsack_with_required(ITEMS, capacity=1000, required_names=["帐篷"])
+    
+    # ---- 独立研究 ----
+    demo_n_queens()
+    demo_unbounded_knapsack()
+    demo_branch_bound()
+    
+    print("\n" + "=" * 70)
+    print("✅ 所有检查点完成!")
+    print(f"  凑硬币: 贪心 {greedy_count}枚 vs 动规 {dp_count}枚")
+    print(f"  背包最优: {max_val}, 组合: {[s['name'] for s in selected]}")
+    print("=" * 70)
